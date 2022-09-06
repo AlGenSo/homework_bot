@@ -39,7 +39,7 @@ logger.addHandler(handler)
 
 
 def send_message(bot, message):
-    '''Отправление сообщений в телегу.'''
+    """Отправление сообщений в телегу."""
     try:
         bot.send_message(TELEGRAM_CHAT_ID, message)
         logger.info(f'Сообщение {message} в Телегу отправлено.')
@@ -48,7 +48,7 @@ def send_message(bot, message):
 
 
 def get_api_answer(current_timestamp):
-    '''Запрос к эндпоинту API-сервиса Я.П.'''
+    """Запрос к эндпоинту API-сервиса Я.П."""
     timestamp = current_timestamp or int(time.time())
     params = {'from_date': timestamp}
 
@@ -68,7 +68,7 @@ def get_api_answer(current_timestamp):
 
 
 def check_response(response):
-    '''Проверка ответа API на корректность.'''
+    """Проверка ответа API на корректность."""
     if response['homeworks'] is None:
         logger.error('Список заданий не обнаружен')
         raise BotException('Список заданий не обнаружен')
@@ -85,10 +85,9 @@ def check_response(response):
 
 
 def parse_status(homework):
-    '''
-    Извлекаем из информации о конкретной домашней работе
+    """Извлекаем из информации о конкретной домашней работе.
     статус этой работы.
-    '''
+    """
     homework_name = homework['homework_name']
     homework_status = homework['status']
 
@@ -104,7 +103,7 @@ def parse_status(homework):
 
 
 def check_tokens():
-    '''Проверка доступности переменных окружения.'''
+    """Проверка доступности переменных окружения."""
     if (PRACTICUM_TOKEN is None
        or TELEGRAM_TOKEN is None
        or TELEGRAM_CHAT_ID is None):
