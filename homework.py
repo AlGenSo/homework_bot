@@ -2,6 +2,7 @@ import logging
 import sys
 import os
 import time
+from typing import List
 import requests
 
 from telegram import Bot
@@ -55,14 +56,20 @@ def get_api_answer(current_timestamp):
     try:
         homework_statuses = requests.get(
             ENDPOINT,
-            HEADERS,
-            params,
+            headers=HEADERS,
+            params=params,
         )
     except requests.exceptions.RequestException as ex:
         logger.error(f'При запросе произошла ошибка: {ex}')
         raise BaseException(
             f'При запросе произошла ошибка: {ex}'
         )
+
+    if homework_statuses.status_code != 200:
+        raise SystemError(
+            f'Ошибка доступа ендпойнта, {homework_statuses.status_code}'
+        )
+
     logger.info('Ответ от эндпоинта получен')
     return homework_statuses.json()
 
@@ -77,11 +84,12 @@ def check_response(response):
         logger.info('Получен пустой список работ')
         return {}
 
-    if response['homeworks'][0].get('status') not in HOMEWORK_STATUSES:
-        logger.error('Недокуентированный статус')
-        raise BotException('Недокуентированный статус')
+    if not isinstance(response['homeworks'], List):
+        raise BotException(
+            'Домашки приходят не в виде списка в ответ от API'
+        )
 
-    return response['homeworks'][0]
+    return response['homeworks']
 
 
 def parse_status(homework):
@@ -93,7 +101,19 @@ def parse_status(homework):
 
     if homework_status not in HOMEWORK_STATUSES:
         logger.error('Обнаружен неизвестный статус!')
-        raise BotException(f'Обнаружен неизвестный статус: {homework_status}')
+        raise BotException(
+            f'Обнаружен недокументироавнный статус: {homework_status}')
+
+    if homework_status is None:
+        BotException(f'Пустое значение статуса: {homework_status}')
+
+    if homework_name is None:
+        BotException(f'Пустое значение названия работы: {homework_name}')
+
+    if 'homework_name' not in homework:
+        raise KeyError(
+            f'Отсутствует ключ "homework_name" : homework = {homework}.'
+        )
 
     verdict = HOMEWORK_STATUSES[homework_status]
 
