@@ -1,9 +1,11 @@
+import json
 import logging
 import sys
 import os
 import time
-from typing import List
+from typing import Dict, List
 import requests
+import telegram
 
 from telegram import Bot
 from logging import StreamHandler
@@ -21,13 +23,12 @@ RETRY_TIME = 600
 ENDPOINT = 'https://practicum.yandex.ru/api/user_api/homework_statuses/'
 HEADERS = {'Authorization': f'OAuth {PRACTICUM_TOKEN}'}
 
-HOMEWORK_STATUSES = {
+HOMEWORK_CONDITION = {
     'approved': 'Работа проверена: ревьюеру всё понравилось. Ура!',
     'reviewing': 'Работа взята на проверку ревьюером.',
     'rejected': 'Работа проверена: у ревьюера есть замечания.'
 }
 
-'''Задаём параметры логирования'''
 logging.basicConfig(
     level=logging.DEBUG,
     filename='program.log',
@@ -44,8 +45,9 @@ def send_message(bot, message):
     try:
         bot.send_message(TELEGRAM_CHAT_ID, message)
         logger.info(f'Сообщение {message} в Телегу отправлено.')
-    except Exception as ex:
+    except telegram.error.TelegramError as ex:
         logger.error(f'Ошибка при отправке сообщения: {ex}')
+        raise BotException(f'Ошибка при отправке сообщения: {ex}')
 
 
 def get_api_answer(current_timestamp):
@@ -66,9 +68,14 @@ def get_api_answer(current_timestamp):
         )
 
     if homework_statuses.status_code != 200:
-        raise SystemError(
+        raise BotException(
             f'Ошибка доступа ендпойнта, {homework_statuses.status_code}'
         )
+
+    try:
+        homework_statuses.json()
+    except json.JSONDecodeError:
+        raise BotException('Ошибка преобразования в json.')
 
     logger.info('Ответ от эндпоинта получен')
     return homework_statuses.json()
@@ -76,16 +83,16 @@ def get_api_answer(current_timestamp):
 
 def check_response(response):
     """Проверка ответа API на корректность."""
-    if response['homeworks'] is None:
+    if not isinstance(response, Dict):
+        raise TypeError(
+            'response прихлдит не в виде словаря'
+        )
+    if response.get('homeworks') is None:
         logger.error('Список заданий не обнаружен')
         raise BotException('Список заданий не обнаружен')
 
-    if response['homeworks'] == []:
-        logger.info('Получен пустой список работ')
-        return {}
-
     if not isinstance(response['homeworks'], List):
-        raise BotException(
+        raise TypeError(
             'Домашки приходят не в виде списка в ответ от API'
         )
 
@@ -96,10 +103,20 @@ def parse_status(homework):
     """Извлекаем из информации о конкретной домашней работе.
     статус этой работы.
     """
-    homework_name = homework['homework_name']
-    homework_status = homework['status']
+    if 'homework_name' not in homework:
+        raise KeyError(
+            f'Отсутствует ключ "homework_name" : homework = {homework}.'
+        )
 
-    if homework_status not in HOMEWORK_STATUSES:
+    if 'status' not in homework:
+        raise KeyError(
+            f'Отсутствует ключ "status" : homework = {homework}.'
+        )
+
+    homework_name = homework.get('homework_name')
+    homework_status = homework.get('status')
+
+    if homework_status not in HOMEWORK_CONDITION:
         logger.error('Обнаружен неизвестный статус!')
         raise BotException(
             f'Обнаружен недокументироавнный статус: {homework_status}')
@@ -110,12 +127,7 @@ def parse_status(homework):
     if homework_name is None:
         BotException(f'Пустое значение названия работы: {homework_name}')
 
-    if 'homework_name' not in homework:
-        raise KeyError(
-            f'Отсутствует ключ "homework_name" : homework = {homework}.'
-        )
-
-    verdict = HOMEWORK_STATUSES[homework_status]
+    verdict = HOMEWORK_CONDITION[homework_status]
 
     logger.info(f'Получен новый статус проверки: {verdict}')
 
@@ -124,27 +136,27 @@ def parse_status(homework):
 
 def check_tokens():
     """Проверка доступности переменных окружения."""
-    if (PRACTICUM_TOKEN is None
-       or TELEGRAM_TOKEN is None
-       or TELEGRAM_CHAT_ID is None):
-        logger.critical('Проблема с переменными окружения')
-        return False
-
-    else:
-        logger.info('Переменные окружения проверены')
-        return True
+    TOKENS = [
+        PRACTICUM_TOKEN,
+        TELEGRAM_TOKEN,
+        TELEGRAM_CHAT_ID,
+    ]
+    for element in TOKENS:
+        if element is None:
+            logger.critical('Проблема с переменной окружения!')
+            return False
+    return True
 
 
 def main():
     """Основная логика работы бота."""
-    if check_tokens():
-        logger.onfo('Пременные окружения ОК')
-    else:
+    if not check_tokens():
         logger.critical('Проверте корректность переменных окружения!')
         exit()
 
     bot = Bot(token=TELEGRAM_TOKEN)
     current_timestamp = int(time.time())
+    message = ''
 
     while True:
         try:
@@ -155,14 +167,20 @@ def main():
                 logger.info('Статус работы получен и отправлен')
             else:
                 logger.info('Изменения не обнаружены')
-            current_timestamp = response['current_date']
-            time.sleep(RETRY_TIME)
 
         except Exception as error:
-            message = f'Сбой в работе программы: {error}'
-            logger.critical(message)
-            time.sleep(RETRY_TIME)
-        else:
+            new_message = f'Сбой в работе программы: {error}'
+            logger.critical(new_message)
+            if new_message != message:
+                bot.send_message(TELEGRAM_CHAT_ID, new_message)
+                logger.info('Новое сообщение отправлено в Телегу')
+                message = new_message
+
+        finally:
+            current_timestamp = response['current_date']
+            logger.info(
+                f'Обновилась переменная current_timestamp: {current_timestamp}'
+            )
             time.sleep(RETRY_TIME)
 
 
