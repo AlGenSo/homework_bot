@@ -15,8 +15,8 @@ from exceptions import BotException
 
 load_dotenv()
 
-PRACTICUM_TOKEN = os.getenv('PRACTICUM_TOKEN', '1')
-TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN', '123:X')
+PRACTICUM_TOKEN = os.getenv('PRACTICUM_TOKEN')
+TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
 TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
 
 RETRY_TIME = 600
@@ -73,12 +73,12 @@ def get_api_answer(current_timestamp):
         )
 
     try:
-        homework_statuses.json()
+        j_hw_status = homework_statuses.json()
     except json.JSONDecodeError:
         raise BotException('Ошибка преобразования в json.')
 
     logger.info('Ответ от эндпоинта получен')
-    return homework_statuses.json()
+    return j_hw_status
 
 
 def check_response(response):
@@ -95,6 +95,10 @@ def check_response(response):
         raise TypeError(
             'Домашки приходят не в виде списка в ответ от API'
         )
+
+    if response.get('current_date') is None:
+        logger.error('Значение ключа current_date отсутствует')
+        raise BotException('Значение ключа current_date отсутствует')
 
     return response['homeworks']
 
@@ -120,9 +124,6 @@ def parse_status(homework):
         logger.error('Обнаружен неизвестный статус!')
         raise BotException(
             f'Обнаружен недокументироавнный статус: {homework_status}')
-
-    if homework_status is None:
-        BotException(f'Пустое значение статуса: {homework_status}')
 
     if homework_name is None:
         BotException(f'Пустое значение названия работы: {homework_name}')
@@ -167,20 +168,22 @@ def main():
                 logger.info('Статус работы получен и отправлен')
             else:
                 logger.info('Изменения не обнаружены')
+                current_timestamp = response['current_date']
+                logger.info(
+                    f'Обновилась переменная current_timestamp:'
+                    f'{current_timestamp}'
+                )
 
         except Exception as error:
             new_message = f'Сбой в работе программы: {error}'
             logger.critical(new_message)
-            if new_message != message:
+            if (new_message != message
+                    and error != telegram.error.TelegramError):
                 bot.send_message(TELEGRAM_CHAT_ID, new_message)
                 logger.info('Новое сообщение отправлено в Телегу')
                 message = new_message
 
         finally:
-            current_timestamp = response['current_date']
-            logger.info(
-                f'Обновилась переменная current_timestamp: {current_timestamp}'
-            )
             time.sleep(RETRY_TIME)
 
 
