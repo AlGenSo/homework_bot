@@ -5,9 +5,8 @@ import os
 import time
 from typing import Dict, List
 import requests
-import telegram
 
-from telegram import Bot
+from telegram import Bot, TelegramError
 from logging import StreamHandler
 from dotenv import load_dotenv
 
@@ -45,7 +44,7 @@ def send_message(bot, message):
     try:
         bot.send_message(TELEGRAM_CHAT_ID, message)
         logger.info(f'Сообщение {message} в Телегу отправлено.')
-    except telegram.error.TelegramError as ex:
+    except TelegramError as ex:
         logger.error(f'Ошибка при отправке сообщения: {ex}')
         raise BotException(f'Ошибка при отправке сообщения: {ex}')
 
@@ -73,12 +72,13 @@ def get_api_answer(current_timestamp):
         )
 
     try:
-        j_hw_status = homework_statuses.json()
+        json_hw_status = homework_statuses.json()
     except json.JSONDecodeError:
         raise BotException('Ошибка преобразования в json.')
 
     logger.info('Ответ от эндпоинта получен')
-    return j_hw_status
+
+    return json_hw_status
 
 
 def check_response(response):
@@ -87,6 +87,7 @@ def check_response(response):
         raise TypeError(
             'response прихлдит не в виде словаря'
         )
+
     if response.get('homeworks') is None:
         logger.error('Список заданий не обнаружен')
         raise BotException('Список заданий не обнаружен')
@@ -165,20 +166,28 @@ def main():
             homeworks = check_response(response)
             if homeworks != [] and homeworks is not None:
                 send_message(bot, parse_status(homeworks[0]))
+                current_timestamp = response['current_date']
                 logger.info('Статус работы получен и отправлен')
+                logger.info(
+                    'Обновилась переменная current_timestamp:'
+                    f'{current_timestamp}'
+                )
             else:
                 logger.info('Изменения не обнаружены')
                 current_timestamp = response['current_date']
                 logger.info(
-                    f'Обновилась переменная current_timestamp:'
+                    'Обновилась переменная current_timestamp:'
                     f'{current_timestamp}'
                 )
+
+        except TelegramError as ex:
+            logger.error(f'Ошибка при отправке сообщения: {ex}')
+            raise BotException(f'Ошибка при отправке сообщения: {ex}')
 
         except Exception as error:
             new_message = f'Сбой в работе программы: {error}'
             logger.critical(new_message)
-            if (new_message != message
-                    and error != telegram.error.TelegramError):
+            if new_message != message:
                 bot.send_message(TELEGRAM_CHAT_ID, new_message)
                 logger.info('Новое сообщение отправлено в Телегу')
                 message = new_message
