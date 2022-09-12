@@ -166,23 +166,19 @@ def main():
             homeworks = check_response(response)
             if homeworks != [] and homeworks is not None:
                 send_message(bot, parse_status(homeworks[0]))
-                current_timestamp = response['current_date']
                 logger.info('Статус работы получен и отправлен')
-                logger.info(
-                    'Обновилась переменная current_timestamp:'
-                    f'{current_timestamp}'
-                )
+
             else:
                 logger.info('Изменения не обнаружены')
-                current_timestamp = response['current_date']
-                logger.info(
-                    'Обновилась переменная current_timestamp:'
-                    f'{current_timestamp}'
-                )
 
-        except TelegramError as ex:
+            current_timestamp = response['current_date']
+            logger.info(
+                'Обновилась переменная current_timestamp:'
+                f'{current_timestamp}'
+            )
+
+        except BotException as ex:
             logger.error(f'Ошибка при отправке сообщения: {ex}')
-            raise BotException(f'Ошибка при отправке сообщения: {ex}')
 
         except Exception as error:
             new_message = f'Сбой в работе программы: {error}'
