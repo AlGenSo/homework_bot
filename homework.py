@@ -10,7 +10,7 @@ from telegram import Bot, TelegramError
 from logging import StreamHandler
 from dotenv import load_dotenv
 
-from exceptions import BotException
+from exceptions import BotException, SendMessageException
 
 load_dotenv()
 
@@ -46,7 +46,7 @@ def send_message(bot, message):
         logger.info(f'Сообщение {message} в Телегу отправлено.')
     except TelegramError as ex:
         logger.error(f'Ошибка при отправке сообщения: {ex}')
-        raise BotException(f'Ошибка при отправке сообщения: {ex}')
+        raise SendMessageException(f'Ошибка при отправке сообщения: {ex}')
 
 
 def get_api_answer(current_timestamp):
@@ -127,7 +127,7 @@ def parse_status(homework):
             f'Обнаружен недокументироавнный статус: {homework_status}')
 
     if homework_name is None:
-        BotException(f'Пустое значение названия работы: {homework_name}')
+        raise BotException(f'Пустое значение названия работы: {homework_name}')
 
     verdict = HOMEWORK_CONDITION[homework_status]
 
@@ -177,7 +177,7 @@ def main():
                 f'{current_timestamp}'
             )
 
-        except BotException as ex:
+        except SendMessageException as ex:
             logger.error(f'Ошибка при отправке сообщения: {ex}')
 
         except Exception as error:
